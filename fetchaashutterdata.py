@@ -5,7 +5,7 @@ import pandas as pd
 import pytz
 from os.path import abspath, join, curdir
 
-archive = JsonFetcher('archappl.diamond.ac.uk', 80)
+DLS_ARCHIVE_URL_PORT = ('archappl.diamond.ac.uk', 80)
 
 start_time = pytz.utc.localize(datetime(2019, 9, 3))
 end_time = pytz.utc.localize(datetime(2019, 10, 24))
@@ -38,16 +38,22 @@ def normalise_pv_name(pv_name):
     return pv_name.replace('-', '_').replace(':', '_')
 
 
+# TODO: implement function to create a shorthand for shutters. Like fe_shtr1, bl_shtr2, etc..
+def get_shtr_short_name(shtr_pv):
+    pass
+
+
 def fetch_and_store_archived_pvs(pvs, start, end, file_name):
+    archive = JsonFetcher(*DLS_ARCHIVE_URL_PORT)
     # For compression see: http://pandas-docs.github.io/pandas-docs-travis/user_guide/io.html#compression
     with pd.HDFStore(file_name, 'w') as store:
         for pv in pvs:
             pv_data = archive.get_values(pv, start, end)
-            df = pd.DataFrame({'values': pv_data.values.squeeze(),
-                               #'severity': pv_data.severities
+            shutter_name = normalise_pv_name(pv_data.pv)
+            df = pd.DataFrame({F"{shutter_name}_values": pv_data.values.squeeze(),
+                               # 'severity': pv_data.severities
                                },
                               index=pv_data.utc_datetimes)
-            shutter_name = normalise_pv_name(pv_data.pv)
             store.put(shutter_name, df)
 
 
@@ -74,12 +80,29 @@ def load_shutter_archive_data_from_file(file_name):
 
 
 def merge_archive_dataframes(data_frames: dict, keys: list):
-    # combined = s2.join(s3, how='outer', lsuffix='_s2', rsuffix='_s3')
-    # combined.fillna(method='ffill')
     if keys is None:
         keys = list(data_frames.keys())
     first = data_frames[keys[0]]
+    # Join note: when passing a list, the lsuffix and rsuffix are not used
+    #            - BUT then the column names in each dataframe MUST be unique.
     merged_dataframe = first.join([data_frames[key] for key in keys[1:]],
                                   how='outer')
-
+    merged_dataframe.fillna(method='ffill', inplace=True)
     return merged_dataframe
+
+
+def get_open_shutters(merged_dataframes):
+    """Return a dataframe with two columns: machine_shutter, beamline_shutters"""
+    open_shutters = merged_dataframes == 3
+    machine_shutter = open_shutters['fe_shtr1']
+    machine_shutter.name = 'machine_shutter'
+    beamline_shutters = open_shutters['fe_shtr2'] & \
+                        open_shutters['bl_shtr1'] & \
+                        open_shutters['bl_shtr2']
+    beamline_shutters.name = 'beamline_shutters'
+
+    all_open_shutters = machine_shutter & beamline_shutters
+    all_open_shutters.name = 'all_shutters'
+
+    result = merged_dataframes.join([machine_shutter, beamline_shutters, all_open_shutters], how='outer')
+    return result
