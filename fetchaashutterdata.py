@@ -120,3 +120,11 @@ def get_open_shutters(merged_dataframes):
 
     result = merged_dataframes.join([machine_shutter, beamline_shutters, all_open_shutters], how='outer')
     return result
+
+
+def load_process_shutter_data(file_name):
+    """Convenience function to load shutter data and extract it into a simple view of machine and beamline shutters"""
+    dfs = load_shutter_archive_data_from_file(file_name)
+    df = merge_archive_dataframes(dfs, None)
+    df = get_open_shutters(df)
+    return df
