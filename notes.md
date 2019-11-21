@@ -22,3 +22,12 @@ https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.loc.
 For example to get all events where shutter was open:
 
 ```dfs['/FE12I_PS_SHTR_02_STA'].loc[dfs['/FE12I_PS_SHTR_02_STA']['values']==3]```
+
+Shutter Enum Statuses:
+```shell script
+[ 0] Fault
+[ 1] Open
+[ 2] Opening
+[ 3] Closed
+[ 4] Closing
+```

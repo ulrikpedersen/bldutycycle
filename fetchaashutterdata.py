@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from aa.js import JsonFetcher
 import numpy
 import pandas as pd
@@ -31,6 +32,13 @@ shutter_pvs = {
     ]
 }
 
+# EPICS Shutter status (:STA) PV states
+SHUTTER_FAIL=0
+SHUTTER_OPEN=1
+SHUTTER_OPENING=2
+SHUTTER_CLOSED=3
+SHUTTER_CLOSING=4
+
 
 def normalise_pv_name(pv_name):
     """Normalise a PV name for use as panda/pytables key in data store (hdf5)
@@ -39,8 +47,14 @@ def normalise_pv_name(pv_name):
 
 
 # TODO: implement function to create a shorthand for shutters. Like fe_shtr1, bl_shtr2, etc..
+REGEXP_SHTR = re.compile(r'^([A-Z]{2})(\d{2}[IJK])-[A-Z]{2}-SHTR-(\d{2}):STA$')
 def get_shtr_short_name(shtr_pv):
-    pass
+    match_groups = REGEXP_SHTR.findall(shtr_pv)[0]
+    area = match_groups[0].lower()
+    area_no = match_groups[1][2].lower() + match_groups[1][:-1]
+    shtr_no = int(match_groups[2])
+    short_name = F"{area}_shtr{shtr_no}"
+    return short_name
 
 
 def fetch_and_store_archived_pvs(pvs, start, end, file_name):
@@ -49,8 +63,8 @@ def fetch_and_store_archived_pvs(pvs, start, end, file_name):
     with pd.HDFStore(file_name, 'w') as store:
         for pv in pvs:
             pv_data = archive.get_values(pv, start, end)
-            shutter_name = normalise_pv_name(pv_data.pv)
-            df = pd.DataFrame({F"{shutter_name}_values": pv_data.values.squeeze(),
+            shutter_name = get_shtr_short_name(pv_data.pv)
+            df = pd.DataFrame({F"{shutter_name}": pv_data.values.squeeze(),
                                # 'severity': pv_data.severities
                                },
                               index=pv_data.utc_datetimes)
@@ -93,7 +107,7 @@ def merge_archive_dataframes(data_frames: dict, keys: list):
 
 def get_open_shutters(merged_dataframes):
     """Return a dataframe with two columns: machine_shutter, beamline_shutters"""
-    open_shutters = merged_dataframes == 3
+    open_shutters = merged_dataframes == SHUTTER_OPEN
     machine_shutter = open_shutters['fe_shtr1']
     machine_shutter.name = 'machine_shutter'
     beamline_shutters = open_shutters['fe_shtr2'] & \
