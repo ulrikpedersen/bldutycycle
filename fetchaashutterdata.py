@@ -128,3 +128,37 @@ def load_process_shutter_data(file_name):
     df = merge_archive_dataframes(dfs, None)
     df = get_open_shutters(df)
     return df
+
+
+def get_delta_times(shutter_state: pd.Series):
+    # Convert the boolean shutter state into integers to enable calculations
+    changes = pd.Series(shutter_state, dtype='int8')
+    # Detect changes of state
+    changes = changes.diff()
+    # Drop all samples between state changes
+    changes = changes.mask(changes == 0).dropna()
+    # Convert changes back in to boolean to get state
+    state = pd.Series(changes.replace(-1, 0), dtype='bool')
+    # Calculate state time periods by differentiating between neighbouring timestamps
+    state_periods_series = (changes.index - pd.Series(changes.index).shift()).shift(periods=-1)
+    state_periods_series.index = changes.index
+    # Finally generate a DataFrame with two columns for state and period.
+    # The two columns have the same DateTime index.
+    state_periods = pd.DataFrame({'period': state_periods_series,
+                                  'state': state})
+    return state_periods
+
+
+def duty_cycle_report(file_name):
+    open_shutters = load_process_shutter_data(file_name)
+
+    beamline_open_shutters = get_delta_times(open_shutters['all_shutters'])
+    machine_open_shutters = get_delta_times(open_shutters['machine_shutter'])
+
+    machine_open_time = machine_open_shutters.loc[machine_open_shutters['state']==True]['period'].sum()
+    beamline_open_time = beamline_open_shutters.loc[beamline_open_shutters['state']==True]['period'].sum()
+
+    print(F"Period from: {open_shutters.index[0]} to: {open_shutters.index[-1]}")
+    print(F"Machine shutters open:  {machine_open_time} ({machine_open_time.seconds} seconds)")
+    print(F"Beamline shutters open: {beamline_open_time} ({beamline_open_time.seconds} seconds)")
+    print(F"BL use of available beam: {beamline_open_time / machine_open_time}")
