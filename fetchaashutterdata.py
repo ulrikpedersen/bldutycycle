@@ -4,6 +4,7 @@ from aa.js import JsonFetcher
 import numpy
 import pandas as pd
 import pytz
+import requests
 from os.path import abspath, join, curdir
 
 DLS_ARCHIVE_URL_PORT = ('archappl.diamond.ac.uk', 80)
@@ -38,6 +39,23 @@ SHUTTER_OPEN=1
 SHUTTER_OPENING=2
 SHUTTER_CLOSED=3
 SHUTTER_CLOSING=4
+
+
+def get_machine_calendar(year, run=None):
+    # Machine Calendar REST API: https://confluence.diamond.ac.uk/x/zAB_Aw
+    resp = requests.get('http://rdb.pri.diamond.ac.uk/php/opr/cs_oprgetjsonyearcal.php',
+                        params={'CALYEAR': 2019},
+                        headers={'content-type': 'application/json'})
+    if resp.status_code != 200:
+        raise RuntimeError('Unable to get machine calendar from http://rdb.pri.diamond.ac.uk')
+
+    cal = resp.json()
+    if len(cal) == 1:
+        cal = cal[0]
+
+    if run is not None:
+        cal = cal['run'][str(run)]
+    return cal
 
 
 def normalise_pv_name(pv_name):
