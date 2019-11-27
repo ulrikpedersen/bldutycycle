@@ -41,30 +41,82 @@ SHUTTER_CLOSED=3
 SHUTTER_CLOSING=4
 
 
-def get_machine_calendar(year, run=None):
-    # Machine Calendar REST API: https://confluence.diamond.ac.uk/x/zAB_Aw
-    resp = requests.get('http://rdb.pri.diamond.ac.uk/php/opr/cs_oprgetjsonyearcal.php',
-                        params={'CALYEAR': 2019},
-                        headers={'content-type': 'application/json'})
-    if resp.status_code != 200:
-        raise RuntimeError('Unable to get machine calendar from http://rdb.pri.diamond.ac.uk')
+class MachineScheduleItem:
+    def __init__(self, item: dict):
+        self._item = item
 
-    cal = resp.json()
-    if len(cal) == 1:
-        cal = cal[0]
+    @staticmethod
+    def _str_to_datetime(dt_str: str):
+        return pd.to_datetime(dt_str, utc=True)
 
-    if run is not None:
-        cal = cal['run'][str(run)]
-    return cal
+    @property
+    def start(self):
+        return self._str_to_datetime(self._item['fromdatetime'])
+
+    @property
+    def end(self):
+        return self._str_to_datetime(self._item['todatetime'])
+
+    @property
+    def duration(self):
+        return self.end - self.start
+
+    @property
+    def description(self):
+        year = self.start.year
+        return F"{self.run} - {self._item['typedescription']}"
+
+    @property
+    def run(self):
+        return F"{self.start.year} {self._item['description']}"
+
+    def __str__(self):
+        s = F"<MachineScheduleItem: {self.description}>"
+        return s
+
+    def __repr__(self):
+        return str(self)
 
 
-def normalise_pv_name(pv_name):
-    """Normalise a PV name for use as panda/pytables key in data store (hdf5)
-    Panda/pytables keys can't have dashes '-' or colon ':'"""
-    return pv_name.replace('-', '_').replace(':', '_')
+class MachineSchedule:
+    def __init__(self):
+        self._url = 'http://rdb.pri.diamond.ac.uk/php/opr/cs_oprgetjsonyearcal.php'
+        self._cal = {}
+
+    def _get_machine_calendar(self, year):
+        # Machine Calendar REST API: https://confluence.diamond.ac.uk/x/zAB_Aw
+        resp = requests.get('http://rdb.pri.diamond.ac.uk/php/opr/cs_oprgetjsonyearcal.php',
+                            params={'CALYEAR': year},
+                            headers={'content-type': 'application/json'})
+        if resp.status_code != 200:
+            raise RuntimeError('Unable to get machine calendar from http://rdb.pri.diamond.ac.uk')
+
+        cal = resp.json()
+        if len(cal) == 1:
+            cal = cal[0]
+
+        self._cal.update({year: cal})
+        return cal
+
+    def get_run(self, year, run):
+        if year not in self._cal:
+            self._get_machine_calendar(year)
+
+        run_items = []
+        for run_item in self._cal[year]['run'][str(run)]:
+            run_items.append(MachineScheduleItem(run_item))
+        return run_items
+
+    def get_year(self, year):
+        if year not in self._cal:
+            self._get_machine_calendar(year)
+
+        runs = []
+        for run in self._cal[year]['run'].keys():
+            runs.append(self.get_run(year, run))
+        return runs
 
 
-# TODO: implement function to create a shorthand for shutters. Like fe_shtr1, bl_shtr2, etc..
 REGEXP_SHTR = re.compile(r'^([A-Z]{2})(\d{2}[IJK])-[A-Z]{2}-SHTR-(\d{2}):STA$')
 def get_shtr_short_name(shtr_pv):
     match_groups = REGEXP_SHTR.findall(shtr_pv)[0]
