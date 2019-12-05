@@ -62,13 +62,14 @@ class MachineSchedule:
         return cal
 
     def get_run(self, year, run):
+        """Return tuple of (start_time, end_time, [run])"""
         if year not in self._cal:
             self._get_machine_calendar(year)
 
         run_items = []
         for run_item in self._cal[year]['run'][str(run)]:
             run_items.append(MachineScheduleItem(run_item))
-        return run_items
+        return run_items[0].start, run_items[-1].end, run_items
 
     def get_run_total_beamtime(self, year, run):
         run = self.get_run(year, run)

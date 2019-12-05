@@ -1,6 +1,6 @@
 from datetime import datetime
 from aa.js import JsonFetcher
-from controlsystem import get_shtr_short_name, shutter_pvs, ShutterStatus
+from controlsystem import get_shtr_short_name, get_shutter_pvs, ShutterStatus
 import pandas as pd
 import pytz
 from os.path import abspath, join, curdir
@@ -25,15 +25,13 @@ def fetch_and_store_archived_pvs(pvs, start, end, file_name):
             store.put(shutter_name, df)
 
 
-def fetch_and_store_shutters(beamlines_shutter_pvs: dict, start, end, dest=None):
+def fetch_and_store_shutters(beamline: str, start, end, dest=None):
     if dest is None:
         dest = curdir
-
     beamline_file = {}
-    for beamline in beamlines_shutter_pvs:
-        fname = abspath(join(dest, F"{beamline}-shutters.h5"))
-        fetch_and_store_archived_pvs(shutter_pvs[beamline], start, end, fname)
-        beamline_file.update({beamline: fname})
+    fname = abspath(join(dest, F"{beamline}-shutters.h5"))
+    fetch_and_store_archived_pvs(get_shutter_pvs(beamline), start, end, fname)
+    beamline_file.update({beamline: fname})
     return beamline_file
 
 
