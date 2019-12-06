@@ -25,6 +25,25 @@ def fetch_and_store_archived_pvs(pvs, start, end, file_name):
             store.put(shutter_name, df)
 
 
+def fetch_archived_pvs(pvs, start, end):
+    archive = JsonFetcher(*DLS_ARCHIVE_URL_PORT)
+    series = []
+    for pv in pvs:
+        # Get numpy arrays from archive
+        pv_data = archive.get_values(pv, start, end)
+
+        # Generate panda.Series arrays with UTC timestamps as index
+        series.append( pd.Series(pv_data.values.squeeze(), index=pv_data.utc_datetimes, name=pv) )
+
+        # TODO: get archive values for exact start and end timestamp
+
+    # Mush pd.Series as columns in a pd.DataFrame
+    data_frame = pd.DataFrame().join(series, how='outer')
+    # Fill 'NaN' values forward as each element is a PV state change in time-series
+    data_frame.fillna(method='ffill', inplace=True)
+    return data_frame
+
+
 def fetch_and_store_shutters(beamline: str, start, end, dest=None):
     if dest is None:
         dest = curdir
